@@ -1,5 +1,5 @@
 from __future__ import print_function
-import json, sys, os, math, argparse
+import json, sys, os, math, argparse, time
 from itertools import chain
 
 import svtyper.version
@@ -432,7 +432,10 @@ def bayesian_genotype(variant, sample, counts, split_weight, disc_weight, debug)
     return variant
 
 def calculate_genotype(variant, sample, z, split_slop, min_aligned, split_weight, disc_weight, breakpoint, max_reads, debug):
+#    t0 = time.time()
     (read_batches, many) = gather_reads(breakpoint, sample, z, max_reads)
+#    t1 = time.time()
+#    logit("Time to gather reads\t{:.4f}".format(t1 - t0))
 
     # if there are too many reads around the breakpoint
     if many is True:
@@ -442,6 +445,7 @@ def calculate_genotype(variant, sample, z, split_slop, min_aligned, split_weight
     if bool(read_batches) is False:
         return make_detailed_empty_genotype(variant, sample)
 
+#    t0 = time.time()
     counts = tally_variant_read_fragments(
         sample,
         split_slop,
@@ -450,12 +454,17 @@ def calculate_genotype(variant, sample, z, split_slop, min_aligned, split_weight
         read_batches,
         debug
     )
+#    t1 = time.time()
+#    logit("Time to tally fragments\t{:.4f}".format(t1 - t0))
 
     total = sum([ counts[k] for k in counts.keys() ])
     if total == 0:
         return make_detailed_empty_genotype(variant, sample)
 
+#    t0 = time.time()
     variant = bayesian_genotype(variant, sample, counts, split_weight, disc_weight, debug)
+#    t1 = time.time()
+#    logit("Time to bayesian genotype\t{:.4f}".format(t1 - t0))
     return variant
 
 def genotype_vcf(src_vcf, out_vcf, sample, z, split_slop, min_aligned, sum_quals, split_weight, disc_weight, max_reads, debug):
@@ -465,10 +474,13 @@ def genotype_vcf(src_vcf, out_vcf, sample, z, split_slop, min_aligned, sum_quals
     total_variants = len(list(vcf_variants(src_vcf.filename)))
 
     for i, vline in enumerate(vcf_variants(src_vcf.filename)):
+        if i < 300000:
+            continue
         v = vline.rstrip().split('\t')
         variant = Variant(v, src_vcf)
-        if i % 1000 == 0:
+        if i % 1000 == 0 and i > 300000:
             logit("[ {} | {} ] Processing variant {}".format(i, total_variants, variant.var_id))
+            break
         if not sum_quals:
             variant.qual = 0
 
