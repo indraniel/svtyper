@@ -62,11 +62,10 @@ cdef class AlignmentFile(AF):
         iter = sam_itr_queryi(self.index, tid, start, stop)
         retval = hts_itr_next(hts_get_bgzfp(self.htsfile), iter, b, self.htsfile)
         while retval >= 0:
-            read = makeAlignedSegment(b, self)
-            if (read.flag & (0x4 | 0x100 | 0x200 | 0x400 | 0x800)):
-                # skip read -- move onto the next read
+            if (b.core.flag & (0x4 | 0x100 | 0x200 | 0x400 | 0x800)):
                 pass
             else:
+                read = makeAlignedSegment(b, self)
                 data[i] = read
                 i += 1
             retval = hts_itr_next(hts_get_bgzfp(self.htsfile), iter, b, self.htsfile)
