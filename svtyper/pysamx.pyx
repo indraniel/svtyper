@@ -39,6 +39,9 @@ cdef class AlignmentFile(AF):
             if filter_method == 1:
                 # filter = "all"
                 if (read.flag & (0x4 | 0x100 | 0x200 | 0x400 | 0x800)):
+                    # skip read if:
+                    # https://github.com/samtools/htslib/blob/master/htslib/sam.h
+                    # BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP | BAM_FSUPPLEMENTARY
                     continue
             elif filter_method == 2:
                 # filter = "nofilter"
@@ -63,6 +66,9 @@ cdef class AlignmentFile(AF):
         retval = hts_itr_next(hts_get_bgzfp(self.htsfile), iter, b, self.htsfile)
         while retval >= 0:
             if (b.core.flag & (0x4 | 0x100 | 0x200 | 0x400 | 0x800)):
+                # skip read if:
+                # https://github.com/samtools/htslib/blob/master/htslib/sam.h
+                # BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP | BAM_FSUPPLEMENTARY
                 pass
             else:
                 read = makeAlignedSegment(b, self)
