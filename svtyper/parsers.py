@@ -822,19 +822,32 @@ class SamFragment(object):
         else:
             self.read_set.add(read_hash)
 
-        if self.is_primary(read):
-            # add the primary reads
-            self.primary_reads.append(read)
-            self.num_primary += 1
+#        if self.is_primary(read):
+#            # add the primary reads
+#            self.primary_reads.append(read)
+#            self.num_primary += 1
+#
+#            # make split candidate and check whether it's valid
+#            split_candidate = SplitRead(read, self.lib)
+#            if split_candidate.is_valid():
+#                self.split_reads.append(split_candidate)
+#
+#            # complete set of primaries
+#            if self.num_primary == 2:
+#                self.readA, self.readB = self.primary_reads
 
-            # make split candidate and check whether it's valid
-            split_candidate = SplitRead(read, self.lib)
-            if split_candidate.is_valid():
-                self.split_reads.append(split_candidate)
+        # add the primary reads
+        self.primary_reads.append(read)
+        self.num_primary += 1
 
-            # complete set of primaries
-            if self.num_primary == 2:
-                self.readA, self.readB = self.primary_reads
+        # make split candidate and check whether it's valid
+        split_candidate = SplitRead(read, self.lib)
+        if split_candidate.is_valid():
+            self.split_reads.append(split_candidate)
+
+        # complete set of primaries
+        if self.num_primary == 2:
+            self.readA, self.readB = self.primary_reads
 
     # tag the read with R (ref), A (alt), or U (unknown) XV tag
     def tag_span(self, p_alt=None):

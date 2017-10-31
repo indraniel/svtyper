@@ -1,13 +1,14 @@
 from __future__ import print_function
-import json, sys, os, math, argparse
+import json, sys, os, math, argparse, time
 from itertools import chain
 
+import pysam
+import svtyper.pysamx as pysamx
 import svtyper.version
 from svtyper.parsers import Vcf, Variant, Sample, LiteRead, SamFragment
 from svtyper.utils import die, logit, prob_mapq, write_sample_json, tempdir, vcf_headers, vcf_variants, vcf_samples
 from svtyper.statistics import bayes_gt
 
-import pysam
 
 
 def get_args():
@@ -48,9 +49,9 @@ def ensure_valid_alignment_file(afile):
 def open_alignment_file(afile, reference_fasta):
     fd = None
     if afile.endswith('.bam'):
-        fd = pysam.AlignmentFile(afile, mode='rb')
+        fd = pysamx.AlignmentFile(afile, mode='rb')
     elif afile.endswith('.cram'):
-        fd = pysam.AlignmentFile(afile, mode='rc', reference_filename=reference_fasta)
+        fd = pysamx.AlignmentFile(afile, mode='rc', reference_filename=reference_fasta)
     else:
         die('Error: %s is not a valid alignment file (*.bam or *.cram)\n' % afile)
 
@@ -140,12 +141,12 @@ def get_breakpoint_regions(breakpoint, sample, z):
 
 def count_reads_in_region(region, sample):
     (sample_name, chrom, pos, left_pos, right_pos) = region
-    count = sample.bam.count(chrom, start=left_pos, stop=right_pos, read_callback='all')
+    count = sample.bam.count(chrom, start=left_pos, stop=right_pos)
     return count
 
 def get_reads_iterator(region, sample):
     (sample_name, chrom, pos, left_pos, right_pos) = region
-    iterator = sample.bam.fetch(chrom, left_pos, right_pos)
+    iterator = sample.bam.fetch2(chrom, left_pos, right_pos)
     return iterator
 
 def retrieve_reads_from_db(breakpoint, sample, z, max_reads):
@@ -165,12 +166,35 @@ def retrieve_reads_from_db(breakpoint, sample, z, max_reads):
     )
     return (over_threshold, reads_generator)
 
+#def retrieve_reads_from_db(breakpoint, sample, z, max_reads):
+#    (over_threshold, reads) = (False, [])
+#    (regionA, regionB) = get_breakpoint_regions(breakpoint, sample, z)
+#    (countA, countB) = ( count_reads_in_region(regionA, sample), count_reads_in_region(regionB, sample) )
+#    if countA > max_reads or countB > max_reads:
+#        msg = ("SKIPPING -- Variant '{}' has too many reads\n"
+#                "\t\t A: {} : {}\n"
+#                "\t\t B: {} : {}").format(breakpoint['id'], regionA, countA, regionB, countB)
+#        logit(msg)
+#        return (over_threshold, reads)
+#
+#    data ={ 'A' : { 'reads' : [], 'counts' : countA, 'region' : regionA },
+#            'B' : { 'reads' : [], 'counts' : countB, 'region' : regionB } }
+#    for side in data:
+#        count = data[side]['counts']
+#        if count > 0:
+#            (sample_name, chrom, pos, left_pos, right_pos) = data[side]['region']
+#            data[side]['reads'] = sample.bam.bulkfetch(contig=chrom, start=left_pos, stop=right_pos, num_reads=count)
+#            #data[side]['reads'] = sample.bam.fetch(contig=chrom, start=left_pos, stop=right_pos)
+#
+#    reads_generator = chain(data['A']['reads'], data['B']['reads'])
+#    return (over_threshold, reads_generator)
+
 def gather_reads(breakpoint, sample, z, max_reads):
     fragment_dict = {}
     (over_threshold, reads) = retrieve_reads_from_db(breakpoint, sample, z, max_reads)
 
     for read in reads:
-        if read.is_unmapped or read.is_duplicate: continue
+#        if read.is_unmapped or read.is_duplicate: continue
         lib = sample.get_lib(read.get_tag('RG'))
         if lib not in sample.active_libs: continue
         if read.query_name in fragment_dict:
@@ -432,7 +456,10 @@ def bayesian_genotype(variant, sample, counts, split_weight, disc_weight, debug)
     return variant
 
 def calculate_genotype(variant, sample, z, split_slop, min_aligned, split_weight, disc_weight, breakpoint, max_reads, debug):
+    #t0 = time.time()
     (read_batches, many) = gather_reads(breakpoint, sample, z, max_reads)
+    #t1 = time.time()
+    #logit("Time to gather reads\t{:.4f}".format(t1 - t0))
 
     # if there are too many reads around the breakpoint
     if many is True:
@@ -464,11 +491,17 @@ def genotype_vcf(src_vcf, out_vcf, sample, z, split_slop, min_aligned, sum_quals
     src_vcf.write_header(out_vcf)
     total_variants = len(list(vcf_variants(src_vcf.filename)))
 
+    logit("skipping the first 300000 SVs")
     for i, vline in enumerate(vcf_variants(src_vcf.filename)):
+        if i < 300000:
+            continue
         v = vline.rstrip().split('\t')
+        if i == 300001:
+            logit("Starting processing")
         variant = Variant(v, src_vcf)
-        if i % 1000 == 0:
+        if i % 1000 == 0 and i > 300000:
             logit("[ {} | {} ] Processing variant {}".format(i, total_variants, variant.var_id))
+            break
         if not sum_quals:
             variant.qual = 0
 
